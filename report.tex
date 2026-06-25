@@ -1,0 +1,250 @@
+\documentclass[a4paper,12pt]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[russian]{babel}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{float}
+\usepackage{caption}
+
+\usepackage[T2A]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[russian]{babel}
+\usepackage{geometry}
+\usepackage{listings}
+\usepackage{xcolor}
+
+\geometry{margin=2cm}
+
+\lstset{
+basicstyle=\ttfamily\small,
+breaklines=true,
+frame=single,
+columns=fullflexible
+}
+
+% Оформление листингов
+\lstset{
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue},
+    commentstyle=\color{gray},
+    stringstyle=\color{red},
+    numbers=left,
+    numberstyle=\tiny,
+    breaklines=true,
+    frame=single,
+    tabsize=2
+}
+
+\begin{document}
+
+\pagestyle{empty}
+
+%-------------------- ТИТУЛЬНЫЙ ЛИСТ --------------------
+
+\begin{center}
+Санкт-Петербургский национальный исследовательский университет\\
+информационных технологий, механики и оптики
+
+\vfill
+Факультет прикладной информатики
+
+\vfill
+\textbf{Web-программирование}
+
+Лабораторная работа №4
+\end{center}
+
+\vfill
+
+\begin{flushright}
+Выполнил: Дармороз М.Д.\\
+Проверил: Богатыренков С.С.
+\end{flushright}
+
+\vfill
+
+\begin{center}
+Санкт-Петербург\\
+2026
+\end{center}
+
+\newpage
+\pagestyle{plain}
+
+\section{Введение}
+
+Целью данной лабораторной работы является разработка веб-приложения на
+Node.js, работающего по протоколу HTTPS, которое реализует два маршрута:
+\begin{itemize}
+  \item \texttt{/login} --- возвращает логин студента в системе;
+  \item \texttt{/id/\{N\}} --- выполняет GET-запрос к внешнему API
+        \url{https://nd.kodaktor.ru/users/\{N\}} без заголовка
+        \texttt{Content-Type} и возвращает значение поля \texttt{login}
+        из полученного ответа.
+\end{itemize}
+
+В качестве стека технологий выбраны платформа Node.js и фреймворк
+Express.js. HTTP-запрос к внешнему ресурсу выполняется встроенным
+модулем \texttt{https} для обеспечения полного контроля над
+отправляемыми заголовками.
+
+\section{Ход работы}
+
+\subsection{Установка зависимостей}
+
+Был инициализирован пустой проект и установлены необходимые пакеты:
+
+\begin{lstlisting}[language=bash, caption={Инициализация проекта}]
+npm init -y
+npm install express
+\end{lstlisting}
+
+Пакет \texttt{express} используется для маршрутизации и обработки
+HTTP-запросов. Модуль \texttt{https} является встроенным и не требует
+установки.
+
+\subsection{Структура проекта}
+
+Файловая структура проекта выглядит следующим образом:
+
+\begin{lstlisting}[language=bash, caption={Структура проекта}]
+weblab4/
+  app.js          % исходный код приложения
+  package.json    % конфигурация проекта и зависимости
+  node_modules/   % установленные пакеты
+\end{lstlisting}
+
+\subsection{Исходный код}
+
+Основной файл приложения --- \texttt{app.js}. Его код представлен
+ниже:
+
+\begin{lstlisting}[language=JavaScript, caption={app.js --- основной сервер}, label={lst:app}]
+const express = require('express');
+const https = require('https');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.get('/login', (req, res) => {
+  res.send('amaenai1_');
+});
+
+app.get('/id/:n', (req, res) => {
+  const { n } = req.params;
+  const url = new URL(`https://nd.kodaktor.ru/users/${n}`);
+
+  const options = {
+    hostname: url.hostname,
+    path: url.pathname,
+    method: 'GET',
+  };
+
+  https.request(options, (response) => {
+    let data = '';
+    response.on('data', chunk => data += chunk);
+    response.on('end', () => {
+      try {
+        const parsed = JSON.parse(data);
+        res.send(parsed.login);
+      } catch {
+        res.status(500).send('Error parsing response');
+      }
+    });
+  }).on('error', (err) => {
+    res.status(500).send(err.message);
+  }).end();
+});
+
+app.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
+});
+\end{lstlisting}
+
+\subsection{Описание работы программы}
+
+При запуске сервер начинает прослушивать порт, указанный в
+переменной окружения \texttt{PORT} (или порт 3000 по умолчанию).
+Приложение обрабатывает два типа запросов:
+
+\textbf{Маршрут \texttt{/login}.} При GET-запросе к этому адресу
+сервер немедленно возвращает строку \texttt{amaenai1\_} --- логин
+студента в системе Moodle. Реализация тривиальна: обработчик
+вызывает \texttt{res.send()} с готовой строкой.
+
+\textbf{Маршрут \texttt{/id/\{N\}}.} Данный маршрут принимает
+параметр \texttt{N} из URL-адреса. Алгоритм его работы:
+
+\begin{enumerate}
+  \item Параметр \texttt{N} извлекается из пути с помощью
+        \texttt{req.params}.
+  \item Формируется целевой URL вида
+        \texttt{https://nd.kodaktor.ru/users/N}.
+  \item Создаётся объект \texttt{options}, содержащий только
+        имя хоста и путь. Поле \texttt{headers} отсутствует, что
+        гарантирует, что заголовок \texttt{Content-Type} не будет
+        отправлен в запросе.
+  \item Выполняется GET-запрос методом \texttt{https.request()}.
+  \item Ответ собирается по частям через событие \texttt{data}.
+  \item После получения всего тела ответа (событие \texttt{end})
+        строка парсится в JSON. Если парсинг успешен, клиенту
+        возвращается значение поля \texttt{login}. В противном
+        случае возвращается ошибка 500.
+  \item При возникновении ошибки сетевого уровня (событие
+        \texttt{error}) клиенту также возвращается ошибка 500 с
+        текстом сообщения.
+\end{enumerate}
+
+Ключевая особенность --- использование встроенного модуля
+\texttt{https} вместо библиотек наподобие \texttt{axios}. Это
+позволяет тонко управлять заголовками: при использовании
+\texttt{axios} по умолчанию устанавливается заголовок
+\texttt{Content-Type: application/json}, что противоречит
+требованию задания. Модуль \texttt{https.request()}, напротив,
+не добавляет никаких заголовков, если они не указаны явно.
+
+\subsection{Деплой на Render}
+
+Для публикации приложения в интернете с поддержкой HTTPS была
+использована платформа Render. Процесс деплоя включает следующие
+шаги:
+
+\begin{enumerate}
+  \item Код загружен в репозиторий на GitHub.
+  \item В личном кабинете Render создан новый Web Service,
+        подключённый к этому репозиторию.
+  \item Указана команда запуска: \texttt{node app.js}.
+  \item Выбран бесплатный тарифный план.
+\end{enumerate}
+
+После сборки и запуска приложение становится доступно по адресу
+\texttt{https://weblab4.onrender.com}. Платформа Render
+автоматически выдаёт SSL-сертификат и проксирует все запросы по
+HTTPS, поэтому дополнительная настройка не требуется.
+
+\section{Заключение}
+
+В ходе лабораторной работы было разработано веб-приложение на
+Node.js с использованием фреймворка Express.js. Приложение
+реализует два маршрута: \texttt{/login}, возвращающий логин
+студента, и \texttt{/id/\{N\}}, выполняющий прокси-запрос к
+внешнему API и возвращающий поле \texttt{login} ответа.
+
+Удалось выполнить все требования задания:
+\begin{itemize}
+  \item приложение работает по протоколу HTTPS (за счёт
+        платформы Render);
+  \item заголовок \texttt{Content-Type} не отправляется в
+        запросе к \texttt{nd.kodaktor.ru};
+  \item код корректен и протестирован.
+\end{itemize}
+
+В качестве дополнительного результата получен опыт деплоя
+Node.js-приложений на платформу Render, включая настройку
+автоматического HTTPS.
+
+\end{document}
