@@ -10,18 +10,32 @@ app.get('/login', (req, res) => {
   res.send('amaenai1_');
 });
 
-app.post('/zipper', upload.single('file'), (req, res) => {
-  if (!req.file) {
-    return res.status(400).send('No file uploaded');
+app.post('/zipper', (req, res) => {
+  const ct = req.headers['content-type'] || '';
+  if (ct.includes('multipart/form-data')) {
+    upload.single('file')(req, res, (err) => {
+      if (err) return res.status(400).send(err.message);
+      if (!req.file) return res.status(400).send('No file uploaded');
+      zlib.gzip(req.file.buffer, (e, c) => {
+        if (e) return res.status(500).send(e.message);
+        res.set('Content-Type', 'application/gzip');
+        res.send(c);
+      });
+    });
+  } else {
+    let data = [];
+    req.on('data', chunk => data.push(chunk));
+    req.on('end', () => {
+      const buffer = Buffer.concat(data);
+      if (buffer.length === 0) return res.status(400).send('No file uploaded');
+      zlib.gzip(buffer, (e, c) => {
+        if (e) return res.status(500).send(e.message);
+        res.set('Content-Type', 'application/gzip');
+        res.send(c);
+      });
+    });
+    req.on('error', e => res.status(500).send(e.message));
   }
-  const originalName = req.file.originalname || 'file';
-  const gzName = originalName.replace(/\.[^.]+$/, '') + '.gz';
-  zlib.gzip(req.file.buffer, (err, compressed) => {
-    if (err) return res.status(500).send(err.message);
-    res.set('Content-Disposition', `attachment; filename="${gzName}"`);
-    res.set('Content-Type', 'application/gzip');
-    res.send(compressed);
-  });
 });
 
 app.listen(PORT, () => {
